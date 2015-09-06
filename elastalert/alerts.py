@@ -3,6 +3,8 @@ import datetime
 import json
 import logging
 import subprocess
+from copy import deepcopy
+import requests
 from email.mime.text import MIMEText
 from smtplib import SMTP
 from smtplib import SMTP_SSL
@@ -443,3 +445,50 @@ class CommandAlerter(Alerter):
     def get_info(self):
         return {'type': 'command',
                 'command': ' '.join(self.last_command)}
+
+
+class HipChatAlerter(Alerter):
+
+    """ Send notfication to a HipChat room. """
+
+    required_options = frozenset(['auth_token', 'room_id'])
+
+    def __init__(self, *args):
+        super(HipChatAlerter, self).__init__(*args)
+        self.auth_token = self.rule.get('auth_token', '')
+        self.room_id = self.rule.get('room_id', '')
+        self.base_uri = 'https://api.hipchat.com/v2/'
+
+    def __post(self, post_params, endpoint):
+
+        """ post to hipchat room. """
+
+        _post_params = deepcopy(post_params)
+
+        headers = {'content-type': 'application/json'}
+        uri = '%s%s?auth_token=%s' % (self.base_uri, endpoint, self.auth_token)
+        http = requests.session()
+        response = http.post(uri, data=json.dumps(_post_params), headers=headers, proxies=None)
+        http.close()
+
+        return response
+
+    def alert(self, matches):
+
+        """ send the alerts """
+
+        params = {
+            "message": '',
+            "message_format": 'html',
+            "notify": False,
+            "color": 'purple'
+        }
+
+        endpoint = 'room/%s/notification' % self.room_id
+        for match in matches:
+            params['message'] = match
+            self.__post(params, endpoint)
+
+    def get_info(self):
+        return {'type': 'HipChat',
+                'room_id': self.rule['room_id']}
