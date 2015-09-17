@@ -61,6 +61,9 @@ oneOf:
       doc_type: {type: string}
       use_terms_query: {type: boolean}
       terms_size: {type: integer}
+      use_agg_query: {type: boolean}
+      agg_field: {type: string}
+      agg_type: {enum: [sum, avg, min, max]}
 
   - title: Spike
     required: [spike_height, spike_type, timeframe]
@@ -76,6 +79,9 @@ oneOf:
       alert_on_new_data: {type: boolean}
       threshold_ref: {type: integer}
       threshold_cur: {type: integer}
+      use_agg_query: {type: boolean}
+      agg_field: {type: string}
+      agg_type: {enum: [sum, avg, min, max]}
 
   - title: Flatline
     required: [threshold, timeframe]
@@ -85,6 +91,9 @@ oneOf:
       threshold: {type: integer}
       use_count_query: {type: boolean}
       doc_type: {type: string}
+      use_agg_query: {type: boolean}
+      agg_field: {type: string}
+      agg_type: {enum: [sum, avg, min, max]}
 
   - title: New Term
     required: [fields]
@@ -181,3 +190,13 @@ properties:
   jira_label: {type: string}
   jira_bump_tickets: {type: boolean}
   jira_max_age: {type: number}
+
+  ### HipChat
+  hipchat_auth_token: {type: string}
+  hipchat_room_id: {type: number}
+
+  ### Slack
+  slack_webhook_url: {type: string}
+  slack_username_override: {type: string}
+  slack_emoji_override: {type: string}
+  slack_msg_color: {enum: [good, warning, danger]}

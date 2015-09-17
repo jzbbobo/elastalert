@@ -2,6 +2,8 @@
 import datetime
 import json
 import logging
+import socket
+import requests
 import subprocess
 from email.mime.text import MIMEText
 from smtplib import SMTP
@@ -11,6 +13,7 @@ from smtplib import SMTPException
 from socket import error
 
 import simplejson
+from requests.exceptions import RequestException
 from jira.client import JIRA
 from jira.exceptions import JIRAError
 from staticconf.loader import yaml_loader
@@ -238,7 +241,7 @@ class EmailAlerter(Alerter):
                 self.smtp.login(self.user, self.password)
         except (SMTPException, error) as e:
             raise EAException("Error connecting to SMTP host: %s" % (e))
-        except SMTPAuthenticationError:
+        except SMTPAuthenticationError as e:
             raise EAException("SMTP username/password rejected: %s" % (e))
         self.smtp.sendmail(self.from_addr, to_addr, email_msg.as_string())
         self.smtp.close()
@@ -477,3 +480,125 @@ class SnsAlerter(Alerter):
                                                aws_secret_access_key=self.aws_secret_key)
         sns_client.publish(self.sns_topic_arn, body, subject=self.create_default_title())
         elastalert_logger.info("Sent sns notification to %s" % (self.sns_topic_arn))
+
+
+class SensuAlerter(Alerter):
+    """ Creates a Sensu check result for each alert """
+
+    def __init__(self, rule):
+        super(SensuAlerter, self).__init__(rule)
+        self.sensu_client_host = self.rule.get('sensu_client_host', 'localhost')
+        self.sensu_client_port = self.rule.get('sensu_client_port', 3030)
+
+    def alert(self, matches):
+        body = ''
+        for match in matches:
+            body += str(BasicMatchString(self.rule, match))
+            # Separate text of aggregated alerts with dashes
+            if len(matches) > 1:
+                body += '\n----------------------------------------\n'
+
+        # build sensu check result
+        import re
+        sensu_check_result = {
+            'name': re.sub('\W', '_', self.rule['name']),  # sensu accepts only alphanumeric chars
+            'output': body,
+            'status': 1
+        }
+
+        # send udp packet to sensu client
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
+        sock.sendto(json.dumps(sensu_check_result), (self.sensu_client_host, self.sensu_client_port))
+        logging.info("Alert sent Sensu agent on %s:%d" % (self.sensu_client_host, self.sensu_client_port))
+
+    def get_info(self):
+        return {'type': 'sensu',
+                'sensu_client_host': self.sensu_client_host,
+                'sensu_client_port': self.sensu_client_port}
+
+
+class HipChatAlerter(Alerter):
+    """ Creates a HipChat room notification for each alert """
+    required_options = frozenset(['hipchat_auth_token', 'hipchat_room_id'])
+
+    def __init__(self, rule):
+        super(HipChatAlerter, self).__init__(rule)
+        self.hipchat_auth_token = self.rule['hipchat_auth_token']
+        self.hipchat_room_id = self.rule['hipchat_room_id']
+        self.url = 'https://api.hipchat.com/v2/room/%s/notification?auth_token=%s' % (self.hipchat_room_id, self.hipchat_auth_token)
+
+    def alert(self, matches):
+        body = ''
+        for match in matches:
+            body += str(BasicMatchString(self.rule, match))
+            # Separate text of aggregated alerts with dashes
+            if len(matches) > 1:
+                body += '\n----------------------------------------\n'
+
+        # post to hipchat
+        headers = {'content-type': 'application/json'}
+        payload = {
+            'color': 'red',
+            'message': body.replace('\n', '<br />'),
+            'notify': True
+        }
+
+        try:
+            response = requests.post(self.url, data=json.dumps(payload), headers=headers)
+            response.raise_for_status()
+        except RequestException as e:
+            raise EAException("Error posting to hipchat: %s" % e)
+        logging.info("Alert sent to HipChat room %s" % self.hipchat_room_id)
+
+    def get_info(self):
+        return {'type': 'hipchat',
+                'hipchat_auth_token': self.hipchat_auth_token,
+                'hipchat_room_id': self.hipchat_room_id}
+
+
+class SlackAlerter(Alerter):
+    """ Creates a Slack room message for each alert """
+    required_options = frozenset(['slack_webhook_url'])
+
+    def __init__(self, rule):
+        super(SlackAlerter, self).__init__(rule)
+        self.slack_webhook_url = self.rule['slack_webhook_url']
+        self.slack_username_override = self.rule.get('slack_username_override', 'elastalert')
+        self.slack_emoji_override = self.rule.get('slack_emoji_override', ':ghost:')
+        self.slack_msg_color = self.rule.get('slack_msg_color', 'danger')
+
+    def alert(self, matches):
+        body = ''
+        for match in matches:
+            body += str(BasicMatchString(self.rule, match))
+            # Separate text of aggregated alerts with dashes
+            if len(matches) > 1:
+                body += '\n----------------------------------------\n'
+
+        # post to slack
+        headers = {'content-type': 'application/json'}
+        payload = {
+            'username': self.slack_username_override,
+            'icon_emoji': self.slack_emoji_override,
+            'attachments': [
+                {
+                    'color': self.slack_msg_color,
+                    'title': self.rule['name'],
+                    'text': body,
+                    'fields': []
+                }
+            ]
+        }
+
+        try:
+            response = requests.post(self.slack_webhook_url, json=payload, headers=headers)
+            response.raise_for_status()
+        except RequestException as e:
+            raise EAException("Error posting to slack: %s" % e)
+        logging.info("Alert sent to Slack")
+
+    def get_info(self):
+        return {'type': 'slack',
+                'slack_username_override': self.slack_username_override,
+                'slack_webhook_url': self.slack_webhook_url}
+

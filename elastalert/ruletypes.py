@@ -72,6 +72,13 @@ class RuleType(object):
         """
         raise NotImplementedError()
 
+    def add_agg_data(self, aggs):
+        """ Gets called when a rule has use_agg_query set to True. Called to add data from querying to the rule.
+
+        :param sums: A dictionary mapping timestamps to aggregates.
+        """
+        raise NotImplementedError()
+
     def add_terms_data(self, terms):
         """ Gets called when a rule has use_terms_query set to True.
 
@@ -178,6 +185,15 @@ class FrequencyRule(RuleType):
             self.occurrences.setdefault('all', EventWindow(self.rules['timeframe'], getTimestamp=self.get_ts)).append(event)
             self.check_for_match('all')
 
+    def add_agg_data(self, data):
+        """ Add aggregated data to the rule. Data should be of the form {ts: agg}. """
+        if len(data) > 1:
+            raise EAException('add_agg_data can only accept one aggregated value at a time')
+        for ts, agg in data.iteritems():
+            event = ({self.ts_field: ts}, agg)
+            self.occurrences.setdefault('all', EventWindow(self.rules['timeframe'], getTimestamp=self.get_ts)).append(event)
+            self.check_for_match('all')
+
     def add_terms_data(self, terms):
         for timestamp, buckets in terms.iteritems():
             for bucket in buckets:
@@ -206,6 +222,7 @@ class FrequencyRule(RuleType):
 
     def check_for_match(self, key):
         # Match if, after removing old events, we hit num_events
+        print '----> ', self.occurrences[key].count(), self.rules['num_events']
         if self.occurrences[key].count() >= self.rules['num_events']:
             event = self.occurrences[key].data[-1][0]
             self.add_match(event)
@@ -328,6 +345,13 @@ class SpikeRule(RuleType):
             raise EAException('add_count_data can only accept one count at a time')
         for ts, count in data.iteritems():
             self.handle_event({self.ts_field: ts}, count, 'all')
+
+    def add_agg_data(self, data):
+        """ Add aggregated data to the rule. Data should be of the form {ts: agg}. """
+        if len(data) > 1:
+            raise EAException('add_agg_data can only accept one aggregated value at a time')
+        for ts, agg in data.iteritems():
+            self.handle_event({self.ts_field: ts}, agg, 'all')
 
     def add_terms_data(self, terms):
         for timestamp, buckets in terms.iteritems():
