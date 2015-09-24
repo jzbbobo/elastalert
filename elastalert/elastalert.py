@@ -318,13 +318,13 @@ class ElastAlerter():
         :param rule: The rule configuration dictionary.
         :param starttime: The earliest time to query.
         :param endtime: The latest time to query.
-        :param agg: metric aggregation type (count, sum, avg, min, max)
-        :return: A dictionary mapping timestamps to sum of values for that time period.
+        :param agg: metric aggregation type (sum, avg, min, max)
+        :return: A dictionary mapping timestamps to value aggregation for that time period.
         """
         rule_filter = copy.copy(rule['filter'])
         base_query = self.get_query(rule_filter, starttime, endtime, timestamp_field=rule['timestamp_field'], sort=False, to_ts_func=rule['dt_to_ts'])
         query = self.get_metric_agg_query(base_query, agg, key)
-        print query
+
         try:
             res = self.current_es.search(index=index, doc_type=None, body=query, search_type='count', ignore_unavailable=True)
         except ElasticsearchException as e:
@@ -334,7 +334,7 @@ class ElastAlerter():
                 e = str(e)[:1024] + '... (%d characters removed)' % (len(str(e)) - 1024)
             self.handle_error('Error running query: %s' % (e), {'rule': rule['name']})
             return None
-        print res
+
         if 'aggregations' not in res:
             return {}
         self.num_hits += res['aggregations']['filtered']['doc_count']
@@ -534,7 +534,7 @@ class ElastAlerter():
 
         # Run the rule. If querying over a large time period, split it up into segments
         self.num_hits = 0
-        segment_size = self.get_segment_size(rule)
+        segment_size = self.get_segment_size(rule) + datetime.timedelta(seconds=1)
 
         while endtime - rule['starttime'] > segment_size:
             tmp_endtime = rule['starttime'] + segment_size
@@ -712,7 +712,7 @@ class ElastAlerter():
                 continue
 
             # Wait before querying again
-            sleep_duration = (next_run - datetime.datetime.utcnow()).seconds
+            sleep_duration = (next_run - datetime.datetime.utcnow()).total_seconds()
             self.sleep_for(sleep_duration)
 
     def run_all_rules(self):

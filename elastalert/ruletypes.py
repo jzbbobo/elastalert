@@ -222,7 +222,6 @@ class FrequencyRule(RuleType):
 
     def check_for_match(self, key):
         # Match if, after removing old events, we hit num_events
-        print '----> ', self.occurrences[key].count(), self.rules['num_events']
         if self.occurrences[key].count() >= self.rules['num_events']:
             event = self.occurrences[key].data[-1][0]
             self.add_match(event)
