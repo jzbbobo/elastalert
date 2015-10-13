@@ -118,6 +118,13 @@ class Alerter(object):
         """
         raise NotImplementedError()
 
+    def resolve(self):
+        """ Resolve a previous alert. Match is a dictionary of information about the alert.
+
+        :param match: A dictionary of relevant information to the alert.
+        """
+        raise NotImplementedError()
+
     def get_info(self):
         """ Returns a dictionary of data related to this alert. At minimum, this should contain
         a field type corresponding to the type of Alerter. """
@@ -510,7 +517,21 @@ class SensuAlerter(Alerter):
         # send udp packet to sensu client
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
         sock.sendto(json.dumps(sensu_check_result), (self.sensu_client_host, self.sensu_client_port))
-        logging.info("Alert sent Sensu agent on %s:%d" % (self.sensu_client_host, self.sensu_client_port))
+        logging.info("Alert sent to Sensu agent on %s:%d" % (self.sensu_client_host, self.sensu_client_port))
+
+    def resolve(self):
+         # build sensu resolve result
+        import re
+        sensu_check_result = {
+            'name': re.sub('\W', '_', self.rule['name']),  # sensu accepts only alphanumeric chars
+            'output': 'Alert is resolved',
+            'status': 0
+        }
+
+        # send udp packet to sensu client
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
+        sock.sendto(json.dumps(sensu_check_result), (self.sensu_client_host, self.sensu_client_port))
+        logging.info("Alert resolve sent to Sensu agent on %s:%d" % (self.sensu_client_host, self.sensu_client_port))
 
     def get_info(self):
         return {'type': 'sensu',
@@ -597,6 +618,29 @@ class SlackAlerter(Alerter):
         except RequestException as e:
             raise EAException("Error posting to slack: %s" % e)
         logging.info("Alert sent to Slack")
+
+    def resolve(self):
+        # post resolve message to slack
+        headers = {'content-type': 'application/json'}
+        payload = {
+            'username': self.slack_username_override,
+            'icon_emoji': self.slack_emoji_override,
+            'attachments': [
+                {
+                    'color': 'good',
+                    'title': self.rule['name'],
+                    'text': 'Alert is resolved',
+                    'fields': []
+                }
+            ]
+        }
+
+        try:
+            response = requests.post(self.slack_webhook_url, json=payload, headers=headers)
+            response.raise_for_status()
+        except RequestException as e:
+            raise EAException("Error posting to slack: %s" % e)
+        logging.info("Alert resolve sent to Slack")
 
     def get_info(self):
         return {'type': 'slack',

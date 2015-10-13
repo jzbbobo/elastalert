@@ -447,13 +447,13 @@ class ElastAlerter():
         """
         query = {'filter': {'term': {'rule_name': '%s' % (rule['name'])}},
                  'sort': {'@timestamp': {'order': 'desc'}}}
+
         try:
             if self.writeback_es:
                 res = self.writeback_es.search(index=self.writeback_index, doc_type='elastalert_status',
                                                size=1, body=query, _source_include=['endtime', 'rule_name'])
                 if res['hits']['hits']:
                     endtime = ts_to_dt(res['hits']['hits'][0]['_source']['endtime'])
-
                     if ts_now() - endtime < self.old_query_limit:
                         return endtime
                     else:
@@ -546,8 +546,12 @@ class ElastAlerter():
             return 0
         rule['type'].garbage_collect(endtime)
 
-        # Process any new matches
+        # If no new matches, resolve alert from the previous run
         num_matches = len(rule['type'].matches)
+        if num_matches == 0:
+            self.resolve_active_alerts(rule, endtime - self.run_every, endtime)
+
+        # Process any new matches
         while rule['type'].matches:
             match = rule['type'].matches.pop(0)
 
@@ -597,6 +601,49 @@ class ElastAlerter():
         self.writeback('elastalert_status', body)
 
         return num_matches
+
+    def resolve_active_alerts(self, rule, start, end):
+        query = {
+                'query': {
+                    'bool': {
+                        'must': [
+                            {
+                                'match_phrase': {
+                                    'rule_name': '\'%s\'' % rule['name']
+                                }
+                            },
+                            {
+                                'match': {
+                                    'alert_sent': 'true'
+                                }
+                            },
+                            {
+                                'range': {
+                                    'alert_time': {'from': dt_to_ts(start), 'to': dt_to_ts(end)}
+                                }
+                            }
+                        ]
+                    }
+                }}
+
+        try:
+            if self.writeback_es:
+                res = self.writeback_es.count(index=self.writeback_index, doc_type='elastalert', body=query)
+                if res['count'] > 0:
+                    for alert in rule['alert']:
+                        try:
+                            alert.resolve()
+                        except EAException as e:
+                            self.handle_error('Error while resolving alert %s: %s' % (alert.get_info()['type'], e), {'rule': rule['name']})
+                            alert_exception = str(e)
+                        else:
+                            self.alerts_sent += 1
+                            alert_sent = True
+        except (ElasticsearchException, KeyError) as e:
+            self.handle_error('Error querying for last alerts: %s' % (e), {'rule': rule['name']})
+            self.writeback_es = None
+
+        return None
 
     def init_rule(self, new_rule, new=True):
         ''' Copies some necessary non-config state from an exiting rule to a new rule. '''
