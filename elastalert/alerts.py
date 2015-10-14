@@ -517,7 +517,7 @@ class SensuAlerter(Alerter):
         # send udp packet to sensu client
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
         sock.sendto(json.dumps(sensu_check_result), (self.sensu_client_host, self.sensu_client_port))
-        logging.info("Alert sent to Sensu agent on %s:%d" % (self.sensu_client_host, self.sensu_client_port))
+        elastalert_logger.info("Alert sent to Sensu agent on %s:%d" % (self.sensu_client_host, self.sensu_client_port))
 
     def resolve(self):
          # build sensu resolve result
@@ -531,7 +531,7 @@ class SensuAlerter(Alerter):
         # send udp packet to sensu client
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
         sock.sendto(json.dumps(sensu_check_result), (self.sensu_client_host, self.sensu_client_port))
-        logging.info("Alert resolve sent to Sensu agent on %s:%d" % (self.sensu_client_host, self.sensu_client_port))
+        elastalert_logger.info("Alert resolve sent to Sensu agent on %s:%d" % (self.sensu_client_host, self.sensu_client_port))
 
     def get_info(self):
         return {'type': 'sensu',
@@ -568,9 +568,9 @@ class HipChatAlerter(Alerter):
         try:
             response = requests.post(self.url, data=json.dumps(payload), headers=headers)
             response.raise_for_status()
+            elastalert_logger.info("Alert sent to HipChat room %s" % self.hipchat_room_id)
         except RequestException as e:
             raise EAException("Error posting to hipchat: %s" % e)
-        logging.info("Alert sent to HipChat room %s" % self.hipchat_room_id)
 
     def get_info(self):
         return {'type': 'hipchat',
@@ -615,9 +615,9 @@ class SlackAlerter(Alerter):
         try:
             response = requests.post(self.slack_webhook_url, json=payload, headers=headers)
             response.raise_for_status()
+            elastalert_logger.info("Alert sent to Slack")
         except RequestException as e:
             raise EAException("Error posting to slack: %s" % e)
-        logging.info("Alert sent to Slack")
 
     def resolve(self):
         # post resolve message to slack
@@ -638,9 +638,9 @@ class SlackAlerter(Alerter):
         try:
             response = requests.post(self.slack_webhook_url, json=payload, headers=headers)
             response.raise_for_status()
+            elastalert_logger.info("Alert resolve sent to Slack")
         except RequestException as e:
             raise EAException("Error posting to slack: %s" % e)
-        logging.info("Alert resolve sent to Slack")
 
     def get_info(self):
         return {'type': 'slack',
