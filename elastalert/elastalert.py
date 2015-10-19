@@ -479,7 +479,7 @@ class ElastAlerter():
 
         # Use buffer for normal queries, or run_every increments otherwise
         buffer_time = rule.get('buffer_time', self.buffer_time)
-        if not rule.get('use_count_query') and not rule.get('use_terms_query'):
+        if not rule.get('use_count_query') and not rule.get('use_terms_query') and not rule.get('use_agg_query'):
             buffer_delta = endtime - buffer_time
             # If we started using a previous run, don't go past that
             if 'minimum_starttime' in rule and rule['minimum_starttime'] > buffer_delta:

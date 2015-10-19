@@ -11,9 +11,11 @@ WORKDIR /opt/elastalert
 RUN \
   apt-get update && \
   apt-get install -y python-dev && \
+  pip install --upgrade pip && \
   pip install -r requirements.txt && \
   rm requirements.txt && \
-  apt-get purge --yes --auto-remove python-pip python-dev && \
+  pip install j2cli && \
+  apt-get purge --yes --auto-remove python-dev && \
   apt-get clean && \
   rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
