@@ -18,6 +18,3 @@ RUN \
   apt-get purge --yes --auto-remove python-dev && \
   apt-get clean && \
   rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-
-# Define default command.
-CMD python -m elastalert.elastalert --verbose
