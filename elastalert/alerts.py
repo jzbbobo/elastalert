@@ -497,6 +497,7 @@ class SensuAlerter(Alerter):
         super(SensuAlerter, self).__init__(rule)
         self.sensu_client_host = self.rule.get('sensu_client_host', 'localhost')
         self.sensu_client_port = self.rule.get('sensu_client_port', 3030)
+        self.sensu_check_handler = self.rule.get('sensu_check_handler')
 
     def alert(self, matches):
         body = ''
@@ -513,6 +514,9 @@ class SensuAlerter(Alerter):
             'output': body,
             'status': 1
         }
+        # add check handler if specified
+        if self.sensu_check_handler:
+            sensu_check_result['handler'] = self.sensu_check_handler
 
         # send udp packet to sensu client
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
